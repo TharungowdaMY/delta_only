@@ -1,3 +1,7 @@
+import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
+from torchvision import datasets, transforms
 import streamlit as st
 import json
 import matplotlib.pyplot as plt
@@ -564,6 +568,97 @@ with col3:
     )
 
 st.divider()
+st.divider()
+
+# ── Spam Detection Demo ───────────────────────────────
+st.subheader("📧 Real World Application — Spam Detection")
+st.markdown(
+    "Delta-Only Training applied to **evolving spam patterns**. "
+    "Spam tactics change weekly — models must adapt continuously "
+    "without retraining from scratch."
+)
+
+import os
+if os.path.exists("spam_results.json"):
+    with open("spam_results.json") as f:
+        sr = json.load(f)
+
+    # Metrics
+    spam_gap     = abs(sr['retrain_accs'][-1] -
+                       sr['delta_accs'][-1]) * 100
+    spam_speedup = sr['speedup']
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Accuracy gap",
+                f"{spam_gap:.2f}%",
+                "vs full retrain")
+    col2.metric("Speedup",
+                f"{spam_speedup:.1f}x",
+                "faster than retrain")
+    col3.metric("Waves processed",
+                f"{len(sr['retrain_accs'])}",
+                "evolving spam patterns")
+
+    # Chart
+    waves = list(range(1, len(sr['retrain_accs']) + 1))
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+
+    # Accuracy chart
+    axes[0].plot(waves, sr['retrain_accs'],
+                 'o-', color='#1A3A5C', lw=2.5, ms=8,
+                 label='Full retrain (oracle)')
+    axes[0].plot(waves, sr['delta_accs'],
+                 's--', color='#1D9E75', lw=2.5, ms=8,
+                 label='Delta + EWC ← our system')
+    axes[0].plot(waves, sr['naive_accs'],
+                 '^:', color='#D85A30', lw=2, ms=7,
+                 label='Naive delta')
+    axes[0].fill_between(waves,
+                          sr['delta_accs'],
+                          sr['retrain_accs'],
+                          alpha=0.12, color='#1D9E75')
+    axes[0].set_title('Spam Detection Accuracy\n'
+                       'Across Evolving Waves',
+                       fontweight='bold')
+    axes[0].set_xlabel('Spam waves seen')
+    axes[0].set_ylabel('Average accuracy')
+    axes[0].legend(fontsize=9)
+    axes[0].grid(alpha=0.3)
+    axes[0].set_ylim(0.5, 1.0)
+    axes[0].set_xticks(waves)
+
+    # F1 chart
+    axes[1].plot(waves, sr['retrain_f1'],
+                 'o-', color='#1A3A5C', lw=2.5, ms=8,
+                 label='Full retrain')
+    axes[1].plot(waves, sr['delta_f1'],
+                 's--', color='#1D9E75', lw=2.5, ms=8,
+                 label='Delta + EWC')
+    axes[1].plot(waves, sr['naive_f1'],
+                 '^:', color='#D85A30', lw=2, ms=7,
+                 label='Naive delta')
+    axes[1].set_title('F1 Score Across Waves\n'
+                       '(spam detection quality)',
+                       fontweight='bold')
+    axes[1].set_xlabel('Spam waves seen')
+    axes[1].set_ylabel('F1 score')
+    axes[1].legend(fontsize=9)
+    axes[1].grid(alpha=0.3)
+    axes[1].set_ylim(0.4, 1.0)
+    axes[1].set_xticks(waves)
+
+    plt.tight_layout()
+    st.pyplot(fig)
+
+    st.success(
+        f"Delta + EWC matches full retraining within "
+        f"**{spam_gap:.2f}%** accuracy on real spam data "
+        f"while being **{spam_speedup:.1f}x faster**. "
+        f"At Gmail scale (15B emails/day), this saves "
+        f"millions in daily compute costs."
+    )
+else:
+    st.info("Run spam_experiment.py first to see results.")
 st.caption(
     "Built with PyTorch · CIFAR-10 · EWC (Kirkpatrick et al. 2017) · "
     "Hackathon Demo"
